@@ -1,0 +1,107 @@
+package TH1;
+
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Random;
+
+public class TH1 {
+
+    static final int N = 120;
+    static final int K = 4;
+
+    static int[] A = new int[N];
+
+    static DateTimeFormatter formatter =
+            DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
+
+    static String now() {
+        return LocalTime.now().format(formatter);
+    }
+
+    // THREAD XỬ LÝ 1 ĐOẠN - CHỈ TÌM MAX
+    static class WorkerThread extends Thread {
+
+        int id;
+        int start;
+        int end;
+        int max = Integer.MIN_VALUE; // Khởi tạo max bằng giá trị nhỏ nhất của kiểu int
+
+        WorkerThread(int id, int start, int end) {
+            this.id = id;
+            this.start = start;
+            this.end = end;
+        }
+
+        @Override
+        public void run() {
+            for (int i = start; i < end; i++) {
+                // Chỉ giữ lại logic tìm MAX
+                if (A[i] > max) {
+                    max = A[i];
+                }
+            }
+        }
+    }
+
+    // MAIN
+    public static void main(String[] args) throws InterruptedException {
+
+        Random rand = new Random();
+
+        // Sinh mảng ngẫu nhiên
+        System.out.println("===== MẢNG A =====");
+        for (int i = 0; i < N; i++) {
+            A[i] = rand.nextInt(500) + 1;
+            System.out.printf("%4d", A[i]);
+
+            if ((i + 1) % 10 == 0) {
+                System.out.println();
+            }
+        }
+
+        int chunk = N / K;
+        WorkerThread[] t = new WorkerThread[K];
+
+        // Tạo K luồng chia đoạn mảng
+        for (int i = 0; i < K; i++) {
+            int start = i * chunk;
+            int end;
+
+            if (i == K - 1) {
+                end = N;
+            } else {
+                end = start + chunk;
+            }
+
+            t[i] = new WorkerThread(i + 1, start, end);
+        }
+
+        // Bắt đầu chạy các luồng (Start)
+        for (int i = 0; i < K; i++) {
+            t[i].start();
+        }
+
+        // Chờ các luồng hoàn thành (Join)
+        for (int i = 0; i < K; i++) {
+            t[i].join();
+        }
+
+        // TỔNG HỢP KẾT QUẢ
+        System.out.println("\nKẾT QUẢ TỪNG LUỒNG:");
+        for (int i = 0; i < K; i++) {
+            System.out.println("Thread T" + (i + 1) + " (Đoạn " + t[i].start + " -> " + (t[i].end - 1) + ") -> MAX = " + t[i].max);
+        }
+
+        // Tìm MAX toàn cục từ kết quả của K luồng
+        int globalMax = Integer.MIN_VALUE;
+        for (int i = 0; i < K; i++) {
+            if (t[i].max > globalMax) {
+                globalMax = t[i].max;
+            }
+        }
+
+        System.out.println("\n\n");
+        System.out.println("-> GIÁ TRỊ LỚN NHẤT TOÀN MẢNG A = " + globalMax);
+        System.out.println("\nHoàn thành lúc: " + now());
+    }
+}
