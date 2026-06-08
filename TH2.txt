@@ -1,0 +1,132 @@
+package TH1;
+
+import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Semaphore;
+import java.time.LocalTime;
+
+public class TH2 {
+
+	// ===== Shared Data =====
+	static class SharedData {
+		static List<Integer> A = new CopyOnWriteArrayList<>();
+		static final int MAX = 200;
+
+		// Readers-Writers Semaphores
+		static Semaphore mutex = new Semaphore(1); // Bảo vệ biến readCount
+		static Semaphore writeBlock = new Semaphore(1); // Khóa quyền ghi khi có người đọc hoặc người ghi khác
+		static int readCount = 0;
+	}
+
+	// ===== Producer (Writer) =====
+	static class Producer extends Thread {
+		private int id;
+		private Random rand = new Random();
+
+		public Producer(int id) {
+			this.id = id;
+		}
+
+		public void run() {
+			while (true) {
+				try {
+					Thread.sleep(rand.nextInt(2000)); // Ngủ ngẫu nhiên
+
+					int value = rand.nextInt(1000); // Sinh số ngẫu nhiên
+
+					SharedData.writeBlock.acquire(); // Xin quyền ghi (Khóa cả Writer khác và tất cả Readers)
+					try {
+						if (SharedData.A.size() < SharedData.MAX) {
+							SharedData.A.add(value);
+							System.out.println("P_" + id + " <" + value + "> <" + LocalTime.now() + ">");
+						}
+					} finally {
+						SharedData.writeBlock.release(); // Đảm bảo luôn mở khóa kể cả khi có lỗi xảy ra
+					}
+
+				} catch (InterruptedException e) {
+					System.out.println("P_" + id + " bị ngắt.");
+					break;
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+
+	// ===== Consumer (Reader) =====
+	static class Consumer extends Thread {
+		private int id;
+		private Random rand = new Random();
+
+		public Consumer(int id) {
+			this.id = id;
+		}
+
+		private int process(int x) {
+			return x * x;
+		}
+
+		public void run() {
+			while (true) {
+				try {
+					Thread.sleep(rand.nextInt(3000));
+
+					// ---- Reader Enter ----
+					SharedData.mutex.acquire();
+					try {
+						SharedData.readCount++;
+						if (SharedData.readCount == 1) {
+							SharedData.writeBlock.acquire(); // Reader đầu tiên chặn không cho Writer vào ghi
+						}
+					} finally {
+						SharedData.mutex.release();
+					}
+
+					// ---- Đọc dữ liệu (Nhiều Reader có thể chạy khúc này cùng lúc) ----
+					if (!SharedData.A.isEmpty()) {
+						int currentSize = SharedData.A.size();
+						if (currentSize > 0) {
+							int index = rand.nextInt(currentSize);
+							int value = SharedData.A.get(index);
+							int result = process(value);
+
+							System.out
+									.println("C_" + id + " <" + value + "> <" + result + "> <" + LocalTime.now() + ">");
+						}
+					}
+
+					// ---- Reader Exit ----
+					SharedData.mutex.acquire();
+					try {
+						SharedData.readCount--;
+						if (SharedData.readCount == 0) {
+							SharedData.writeBlock.release(); // Reader cuối cùng rời đi, mở khóa cho Writer
+						}
+					} finally {
+						SharedData.mutex.release();
+					}
+
+				} catch (InterruptedException e) {
+					System.out.println("C_" + id + " bị ngắt.");
+					break;
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+
+	public static void main(String[] args) {
+		int k = 3; // Số Producer
+		int h = 5; // Số Consumer
+
+		for (int i = 1; i <= k; i++) {
+			new Producer(i).start();
+		}
+
+		for (int i = 1; i <= h; i++) {
+			new Consumer(i).start();
+		}
+	}
+}
